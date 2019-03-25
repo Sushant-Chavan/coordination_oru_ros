@@ -29,6 +29,7 @@ import se.oru.coordination.coordination_oru.motionplanning.AbstractMotionPlanner
 import se.oru.coordination.coordination_oru.util.Missions;
 import se.oru.coordination.coordination_oru.util.RVizVisualization;
 import se.oru.coordination.coordinator.ros_coordinator.ComputeTaskServiceMotionPlanner;
+import se.oru.coordination.coordinator.ros_coordinator.CustomReedsShepp;
 import se.oru.coordination.coordinator.ros_coordinator.ReedsSheppCarPlanner;
 import se.oru.coordination.coordinator.ros_coordinator.TrajectoryEnvelopeCoordinatorROS;
 
@@ -135,10 +136,11 @@ public class MainNode extends AbstractNodeMain {
 				for (final int robotID : robotIDs) {
 					
                     // ComputeTaskServiceMotionPlanner mp = new ComputeTaskServiceMotionPlanner(robotID, node, tec);
-                    ReedsSheppCarPlanner mp = new ReedsSheppCarPlanner();
-                    mp.setRadius(0.1);
-                    mp.setTurningRadius(4.0);
-                    mp.setDistanceBetweenPathPoints(0.3);
+                    CustomReedsShepp mp = new CustomReedsShepp(robotID, tec);
+                    // ReedsSheppCarPlanner mp = new ReedsSheppCarPlanner();
+                    // mp.setRadius(0.1);
+                    // mp.setTurningRadius(4.0);
+                    // mp.setDistanceBetweenPathPoints(0.3);
 					mp.setFootprint(footprintCoords);
 					tec.setMotionPlanner(robotID, mp);
 					isPlanning.put(robotID, false);
