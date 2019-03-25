@@ -1,7 +1,6 @@
 package se.oru.coordination.coordinator.ros_coordinator;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.io.File;
 
 import com.sun.jna.Native;
@@ -12,27 +11,15 @@ import com.sun.jna.ptr.PointerByReference;
 
 import org.metacsp.multi.spatioTemporal.paths.Pose;
 import org.metacsp.multi.spatioTemporal.paths.PoseSteering;
-import org.metacsp.multi.spatioTemporal.paths.Quaternion;
-import org.ros.exception.RemoteException;
-import org.ros.exception.RosRuntimeException;
-import org.ros.exception.ServiceNotFoundException;
-import org.ros.node.ConnectedNode;
-import org.ros.node.service.ServiceClient;
-import org.ros.node.service.ServiceResponseListener;
 
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.geom.Polygon;
 
-import geometry_msgs.Point;
-import orunav_msgs.ComputeTask;
-import orunav_msgs.ComputeTaskRequest;
-import orunav_msgs.ComputeTaskResponse;
-import orunav_msgs.RobotTarget;
-import orunav_msgs.Shape;
 import se.oru.coordination.coordination_oru.motionplanning.AbstractMotionPlanner;
 import se.oru.coordination.coordination_oru.util.GeometrySmoother;
 import se.oru.coordination.coordination_oru.util.GeometrySmoother.SmootherControl;
+import se.oru.coordination.coordinator.ros_coordinator.ReedsSheppCarPlannerLib.PathPose;
 import se.oru.coordination.coordinator.ros_coordinator.TrajectoryEnvelopeTrackerROS.VEHICLE_STATE;
 
 public class CustomReedsShepp extends AbstractMotionPlanner {
@@ -137,10 +124,54 @@ public class CustomReedsShepp extends AbstractMotionPlanner {
 			return false;
 		}
 		
-		// this.callComputeTaskService(this.goal[0], robotID);
-		// while (computing) try { Thread.sleep(100); } catch (InterruptedException e) { e.printStackTrace(); }
-        // return outcome;
-        return false;
+        ArrayList<PoseSteering> finalPath = new ArrayList<PoseSteering>();  
+        PLANNER_TYPE plannerType = PLANNER_TYPE.SIMPLE;
+		for (int i = 0; i < this.goal.length; i++) {
+			Pose start_ = null;
+            Pose goal_ = this.goal[i];
+            start_ = tec.getRobotReport(robotID).getPose();
+			path = new PointerByReference();
+			pathLength = new IntByReference();
+			if (collisionCircleCenters == null) {
+				if (!INSTANCE.plan(mapFilename, mapResolution, robotRadius, start_.getX(), start_.getY(), start_.getTheta(), goal_.getX(), goal_.getY(), goal_.getTheta(), path, pathLength, distanceBetweenPathPoints, turningRadius)) return false;
+			}
+			else {
+				double[] xCoords = new double[collisionCircleCenters.length];
+				double[] yCoords = new double[collisionCircleCenters.length];
+				int numCoords = collisionCircleCenters.length;
+				for (int j = 0; j < collisionCircleCenters.length; j++) {
+					xCoords[j] = collisionCircleCenters[j].x;
+					yCoords[j] = collisionCircleCenters[j].y;
+				}
+				metaCSPLogger.info("Path planning with " + collisionCircleCenters.length + " circle positions");
+				if (this.mapFilename != null) {
+                    String experienceDBName = this.getOriginalFilename();
+					if (!INSTANCE.plan_multiple_circles(mapFilename, mapResolution, robotRadius, xCoords, yCoords, numCoords, start_.getX(), start_.getY(), start_.getTheta(), goal_.getX(), goal_.getY(), goal_.getTheta(), path, pathLength, distanceBetweenPathPoints, turningRadius, plannerType.ordinal(), experienceDBName)) return false;					
+				}
+				else {
+                    if (start_ == null)
+                    {
+                        System.out.println(">>>>>>>>>>>>>>>>>>>> Start is NULL");
+                    }
+                    if (goal_ == null)
+                    {
+                        System.out.println(">>>>>>>>>>>>>>>>>>>> Goal is NULL");
+                    }
+					if (!INSTANCE.plan_multiple_circles_nomap(xCoords, yCoords, numCoords, start_.getX(), start_.getY(), start_.getTheta(), goal_.getX(), goal_.getY(), goal_.getTheta(), path, pathLength, distanceBetweenPathPoints, turningRadius, plannerType.ordinal())) return false;					
+				}
+			}
+			final Pointer pathVals = path.getValue();
+			final PathPose valsRef = new PathPose(pathVals);
+			valsRef.read();
+			int numVals = pathLength.getValue();
+			if (numVals == 0) return false;
+			PathPose[] pathPoses = (PathPose[])valsRef.toArray(numVals);
+			if (i == 0) finalPath.add(new PoseSteering(pathPoses[0].x, pathPoses[0].y, pathPoses[0].theta, 0.0));
+			for (int j = 1; j < pathPoses.length; j++) finalPath.add(new PoseSteering(pathPoses[j].x, pathPoses[j].y, pathPoses[j].theta, 0.0));
+			INSTANCE.cleanupPath(pathVals);
+		}
+		this.pathPS = finalPath.toArray(new PoseSteering[finalPath.size()]);
+		return true;
 	}
 
 }
